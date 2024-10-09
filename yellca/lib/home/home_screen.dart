@@ -2,20 +2,35 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:provider/provider.dart';
 
 import 'package:yellca/authentication/login_screen.dart';
-import 'package:yellca/location/update_building.dart';
+import 'package:yellca/bookmark/bookmark_screen.dart';
 import 'package:yellca/location/bt_test.dart';
+import 'package:yellca/models/profile_screen.dart';
+import 'package:yellca/destination/destination_screen.dart';
+import 'package:yellca/models/favorite_provider.dart';
+
 
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final bool isLoggedIn;
+  final String? nickname;
+  final String? profileImagePath;
+
+  HomeScreen({
+    required this.isLoggedIn,
+    this.nickname,
+    this.profileImagePath,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+
+
   String _currentBuilding = '현재 건물 정보';
   String _currentkoongya = '현재 건물 내 내위치';
 
@@ -26,7 +41,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
 
-
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isListening = false;
   String _text = '';
@@ -34,16 +48,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _startListening() async {
     if (await _speech.initialize()) {
+      print("음성 인식 초기화 성공");
       setState(() {
         _isListening = true;
-        _text = '';
+        _text = ''; // 초기 텍스트 설정
       });
 
       _speech.listen(onResult: (result) {
+        // 음성 인식 결과가 업데이트 될 때마다 로그 출력
+        print("인식된 단어: ${result.recognizedWords}");
         setState(() {
-          _text = result.recognizedWords;
+          _text = result.recognizedWords; // 인식된 단어를 UI에 업데이트
+          print("현재 _text: $_text");
         });
+
+        // 최종 결과인 경우 결과 화면으로 전환
+        if (result.finalResult) {
+          _showResultOverlay(); // 음성 인식이 끝나면 결과 화면 표시
+        }
       });
+    } else {
+      print("음성 인식 초기화 실패");
     }
   }
 
@@ -52,22 +77,20 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _isListening = false;
     });
-    _overlayEntry?.remove();
-    _overlayEntry = null;
   }
 
   void _showOverlay() {
     _overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
-        top: MediaQuery.of(context).size.height / 2 - 230, // 정중앙 위치
-        left: MediaQuery.of(context).size.width / 2 - 125, // 정중앙 위치
+        top: MediaQuery.of(context).size.height / 2 - 230,
+        left: MediaQuery.of(context).size.width / 2 - 125,
         child: Material(
-          borderRadius: BorderRadius.circular(10), // 모서리 둥글게
+          borderRadius: BorderRadius.circular(10),
           elevation: 8,
           child: Container(
             width: 250,
-            height: 450, // 높이를 늘림
-            padding: EdgeInsets.all(16), // 패딩 추가
+            height: 450,
+            padding: EdgeInsets.all(16),
             color: Colors.white,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.start,
@@ -79,71 +102,40 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: Icon(Icons.close, color: Colors.black),
                     onPressed: () {
                       _stopListening(); // 음성 인식 중지
-                      _overlayEntry?.remove(); // 오버레이 닫기
-                      _overlayEntry = null; // 오버레이 엔트리 초기화
+                      if (_overlayEntry != null) {
+                        _overlayEntry!.remove(); // 오버레이 제거
+                        _overlayEntry = null; // 오버레이 엔트리 null로 설정
+                      }
                     },
                   ),
                 ),
-                SizedBox(height: 20), // 위쪽 간격
+                SizedBox(height: 20),
 
-                // 아이콘 이미지
-                Image.asset('assets/image/voice/listening-icon.png', width: 80, height: 80),
+                // 인식 중... 아이콘
+                Image.asset(
+                  'assets/image/voice/listening-icon.png', // 원하는 이미지 경로로 변경하세요
+                  width: 80,
+                  height: 80,
+                ),
 
-                SizedBox(height: 20), // 아이콘과 텍스트 간격
+                SizedBox(height: 20),
 
-                // 초기 멘트
+                // 인식 중... 텍스트
                 Text(
-                  '목적지를 말씀해주세요',
+                  '인식 중...',
                   style: TextStyle(fontSize: 18),
                   textAlign: TextAlign.center,
                 ),
-
-                SizedBox(height: 20), // 텍스트와 음성 결과 간격
+                SizedBox(height: 20),
 
                 // 음성 인식 결과
-                if (_text.isNotEmpty) ...[
-                  Text(
-                    _text,
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
+                Text(
+                  _text.isEmpty ? '목적지를 말씀해주세요' : _text,
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
 
-                  SizedBox(height: 20), // 결과와 다음 멘트 간격
-
-                  // 확인 멘트
-                  Text(
-                    '말씀하신 목적지가 맞나요?',
-                    style: TextStyle(fontSize: 18),
-                    textAlign: TextAlign.center,
-                  ),
-
-                  SizedBox(height: 20), // 멘트와 버튼 간격
-
-                  // 버튼들
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      ElevatedButton(
-                        onPressed: () {
-                          // 검색 기능으로 넘어가기
-                          print('해당 목적지 검색: $_text');
-                          _stopListening(); // 음성 인식 중지
-                          _overlayEntry?.remove(); // 오버레이 닫기
-                          _overlayEntry = null; // 오버레이 엔트리 초기화
-                          // 목적지 검색 화면으로 이동하는 코드 추가 필요
-                        },
-                        child: Text("해당 목적지 검색"),
-                      ),
-                      ElevatedButton(
-                        onPressed: () {
-                          _text = ''; // 텍스트 초기화
-                          _startListening(); // 다시 말하기
-                        },
-                        child: Text("다시 말하기"),
-                      ),
-                    ],
-                  ),
-                ],
+                SizedBox(height: 20),
               ],
             ),
           ),
@@ -152,36 +144,94 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     Overlay.of(context)?.insert(_overlayEntry!);
-    _startListening();
+    _startListening(); // 음성 인식 시작
   }
 
+  void _showResultOverlay() {
+    _overlayEntry?.remove(); // 기존 오버레이 제거
+    _overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        top: MediaQuery.of(context).size.height / 2 - 230,
+        left: MediaQuery.of(context).size.width / 2 - 125,
+        child: Material(
+          borderRadius: BorderRadius.circular(10),
+          elevation: 8,
+          child: Container(
+            width: 250,
+            height: 450,
+            padding: EdgeInsets.all(16),
+            color: Colors.white,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                // 닫기 버튼
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: IconButton(
+                    icon: Icon(Icons.close, color: Colors.black),
+                    onPressed: () {
+                      _stopListening(); // 음성 인식 중지
+                      if (_overlayEntry != null) {
+                        _overlayEntry!.remove(); // 오버레이 제거
+                        _overlayEntry = null; // 오버레이 엔트리 null로 설정
+                      }
+                    },
+                  ),
+                ),
+                SizedBox(height: 20),
 
+                // 새 이미지
+                Image.asset('assets/image/home/location-icon_cube.gif', width: 100, height: 100),
 
+                SizedBox(height: 20),
 
+                // 인식된 텍스트
+                Text(
+                  _text,
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
 
+                SizedBox(height: 20),
 
+                // 확인 멘트
+                Text(
+                  '말씀하신 목적지가 맞나요?',
+                  style: TextStyle(fontSize: 18),
+                  textAlign: TextAlign.center,
+                ),
 
+                SizedBox(height: 20),
 
+                // 버튼들
+                ElevatedButton(
+                  onPressed: () {
+                    print('해당 목적지 검색: $_text');
+                    _stopListening();
+                    _overlayEntry?.remove();
+                    _overlayEntry = null;
+                    // 검색 화면으로 이동하는 코드 추가
+                  },
+                  child: Text("해당 목적지 검색"),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _text = ''; // 텍스트 초기화
+                    });
+                    _showOverlay(); // 다시 인식
+                  },
+                  child: Text("다시 말하기"),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    Overlay.of(context)?.insert(_overlayEntry!);
+  }
 
 
 
@@ -237,23 +287,45 @@ class _HomeScreenState extends State<HomeScreen> {
                  ),
                  actions: [
                    GestureDetector(
-                     onTap: () {
+                     onTap: widget.isLoggedIn ? null : () {
+                       // 로그인 상태가 아닐 때만 LoginScreen으로 이동
                        Navigator.push(context, MaterialPageRoute(builder: (context) => LoginScreen()));
                      },
                      child: Row(
                        children: [
                          Text(
-                           '로그인 해주세요',
-                           style:
-                           TextStyle(fontSize: 16, color: Colors.redAccent),
+                           widget.isLoggedIn && widget.nickname != null
+                               ? '${widget.nickname}님'
+                               : '로그인 해주세요',
+                           style: TextStyle(
+                             fontSize: 16,
+                             color: widget.isLoggedIn && widget.nickname != null
+                                 ? Colors.white // 로그인 상태일 때 글자색 흰색
+                                 : Colors.redAccent, // 로그인 하지 않았을 때 글자색 빨간색
+                           ),
                          ),
                          SizedBox(
                            width: 16,
                          ),
-                         CircleAvatar(
-                           radius: 25,
-                           backgroundImage:
-                           AssetImage('asset/img/default_profile.png'),
+                         GestureDetector(
+                           onTap: () {
+                             //로그인 상태일 때 프로필 이미지 클릭하면 프로필 페이지로 이동
+                             if (widget.isLoggedIn) {
+                               Navigator.push(
+                                 context,
+                                 MaterialPageRoute(builder: (context) => ProfileScreen())
+                               );
+                             }
+                           },
+                           child: CircleAvatar(
+                             radius: 25,
+                             backgroundImage:
+                             AssetImage(
+                               widget.isLoggedIn && widget.profileImagePath != null
+                                     ? 'assets/image/login/koongya_profile.png'
+                                     : 'assets/image/login/default_profile.png',
+                                 )
+                           ),
                          ),
                        ],
                      ),
@@ -322,19 +394,15 @@ class _HomeScreenState extends State<HomeScreen> {
                    height: 900,
                    child: Column(
                      children: [
-                       //현재위치 컨테이너
+                       // 현재위치 컨테이너
                        Expanded(
                          flex: 2,
                          child: GestureDetector(
-                           onTap: () async {
-                             //결과값 받기
-                             final updatedBuilding = await Navigator.push(
-                                 context,
-                                 MaterialPageRoute(builder: (context) => UpdateBuilding()),
-                                 );
-                             if (updatedBuilding != null) {
-                               _updatelocation(updatedBuilding);
-                             }
+                           onTap: () {
+                             // 건물 정보 업데이트
+                             setState(() {
+                               _currentBuilding = '배화여자대학교 목련관';
+                             });
                            },
                            child: Container(
                              width: double.infinity,
@@ -370,17 +438,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                                fontFamily: 'PontanoSans',
                                              ),
                                            ),
-                                           SizedBox(height: 16.0),
-
-                                           Text(
-                                             _currentBuilding,
-                                             style: TextStyle(
-                                                 color: Colors.white,
-                                                 fontSize: 20,
-                                             ),
-                                           ),
-
-                                           ///이거 건물내부 위치로 변경해야함
+                                           SizedBox(height: 8.0),
                                            Text(
                                              _currentBuilding,
                                              style: TextStyle(
@@ -388,6 +446,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                                fontSize: 20,
                                              ),
                                            ),
+                                           // 이거 건물 내부 위치로 변경해야함
+                                           // Text(
+                                           //   _currentBuilding,
+                                           //   style: TextStyle(
+                                           //     color: Colors.white,
+                                           //     fontSize: 20,
+                                           //   ),
+                                           // ),
                                          ],
                                        ),
                                        Image.asset(
@@ -403,6 +469,7 @@ class _HomeScreenState extends State<HomeScreen> {
                            ),
                          ),
                        ),
+
                        Expanded(
                          flex: 2,
                          child: Row(
@@ -413,7 +480,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                flex: 1,
                                child: GestureDetector(
                                  onTap: () {
-                                   ///목적지 설정 컨테이너 클릭 시
+                                   Navigator.push(
+                                     context,
+                                     MaterialPageRoute(builder: (context) => DestinationSetting())
+                                   );
                                  },
                                  child: Container(
                                    width: double.infinity,
@@ -460,8 +530,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                flex: 1,
                                child: GestureDetector(
                                  onTap: (){
-                                   ///즐겨찾기 컨테이너 클릭 시
-                                 },
+                                   //FavoriteProvider에서 즐겨찾기 목록 가져오기
+                                   final favoriteProvider = Provider.of<FavoriteProvider>(context, listen: false);
+
+                                   Navigator.push(
+                                     context,
+                                     MaterialPageRoute(builder: (context) => BookmarkScreen(favoritePlaces: favoriteProvider.favorites), //즐겨찾기목록 전
+                                     )
+                                   );
+                                   },
                                  child: Container(
                                    width: double.infinity,
                                    margin: EdgeInsets.all(8.0),
@@ -649,7 +726,7 @@ class _HomeScreenState extends State<HomeScreen> {
                            onTap: () {
                              Navigator.push(
                                  context,
-                                 MaterialPageRoute(builder: (context) => BTTest()),
+                                 MaterialPageRoute(builder: (context) => BtTest()),
                              );
                            },
                            child: Container(

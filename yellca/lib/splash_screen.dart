@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:yellca/home/home_screen.dart';
+import 'package:yellca/models/auth_provider.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -36,11 +38,19 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
         });
         _secondWidgetController.forward(); // 두 번째 위젯 커짐 애니메이션 시작
 
-        // 2초 후 HomeScreen으로 이동
+        // 2초 후 로그인 상태에 따라 HomeScreen으로 이동
         Future.delayed(Duration(seconds: 2), () {
-          Navigator.push(
+          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+          Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => HomeScreen()),
+            MaterialPageRoute(
+              builder: (context) => HomeScreen(
+                isLoggedIn: authProvider.isLoggedIn,
+                nickname: authProvider.nickname,
+                profileImagePath: authProvider.profileImagePath,
+              ),
+            ),
           );
         });
       });
